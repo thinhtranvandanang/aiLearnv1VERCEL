@@ -13,7 +13,7 @@ app = FastAPI(
 # CORS Configuration
 # Đảm bảo Middleware này luôn chạy để chặn và xử lý preflight OPTIONS
 # Nguyên tắc: allow_credentials=True KHÔNG ĐƯỢC dùng với allow_origins=["*"]
-origins = [str(origin) for origin in settings.BACKEND_CORS_ORIGINS_FIX]
+origins = [str(origin) for origin in settings.CORS_ORIGINS]
 use_wildcard = not origins
 
 app.add_middleware(
