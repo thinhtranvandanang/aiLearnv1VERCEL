@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     @validator("BACKEND_CORS_ORIGINS", pre=True)
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+        # Handle None or empty string
+        if v is None or v == "" or v == "[]":
+            return []
         if isinstance(v, str) and not v.startswith("["):
             # Tách chuỗi bằng dấu phẩy và loại bỏ khoảng trắng + dấu / ở cuối
             return [i.strip().rstrip("/") for i in v.split(",") if i.strip()]
