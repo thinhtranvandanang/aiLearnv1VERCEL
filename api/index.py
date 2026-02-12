@@ -1,13 +1,23 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+import traceback
+
 # Simple health check app that doesn't require database
 app = FastAPI(title="EduNexia Health Check")
+import_error = None
 
 @app.get("/")
 @app.get("/api")
 @app.get("/api/v1")
 def health_check():
+    if import_error:
+        return JSONResponse({
+            "status": "error",
+            "message": "Main app failed to load",
+            "error": import_error,
+            "traceback": traceback.format_exc()
+        }, status_code=500)
     return JSONResponse({
         "status": "ok",
         "message": "Serverless function is running",
@@ -21,7 +31,8 @@ def detailed_health():
         "status": "ok",
         "environment": os.environ.get("VERCEL_ENV", "unknown"),
         "has_database_url": bool(os.environ.get("DATABASE_URL")),
-        "python_version": os.sys.version
+        "python_version": os.sys.version,
+        "import_error": import_error
     })
 
 # Try to import the main app, but fall back to health check if it fails
@@ -30,5 +41,7 @@ try:
     app = main_app
     print("✅ Successfully loaded main app")
 except Exception as e:
+    import_error = str(e)
     print(f"⚠️ Failed to load main app: {e}")
     print("Using health check app instead")
+
