@@ -1,5 +1,5 @@
 from typing import List, Union, Optional
-from pydantic import AnyHttpUrl, field_validator, model_validator, BaseSettings
+from pydantic import AnyHttpUrl, validator, root_validator, BaseSettings
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "EduNexia API"
@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: List[str] = []
     ALLOWED_ORIGINS: Optional[str] = None
 
-    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
+    @validator("BACKEND_CORS_ORIGINS", pre=True)
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
         if isinstance(v, str) and not v.startswith("["):
@@ -28,13 +28,15 @@ class Settings(BaseSettings):
             return [str(i).strip().rstrip("/") for i in v]
         return []
     
-    @model_validator(mode="after")
-    def sync_cors_origins(self) -> "Settings":
+    @root_validator
+    def sync_cors_origins(cls, values):
         """Nếu có ALLOWED_ORIGINS trong .env, nạp vào BACKEND_CORS_ORIGINS."""
-        if self.ALLOWED_ORIGINS and not self.BACKEND_CORS_ORIGINS:
-            origins = [i.strip().rstrip("/") for i in self.ALLOWED_ORIGINS.split(",") if i.strip()]
-            self.BACKEND_CORS_ORIGINS = origins
-        return self
+        allowed_origins = values.get("ALLOWED_ORIGINS")
+        backend_cors_origins = values.get("BACKEND_CORS_ORIGINS")
+        if allowed_origins and not backend_cors_origins:
+            origins = [i.strip().rstrip("/") for i in allowed_origins.split(",") if i.strip()]
+            values["BACKEND_CORS_ORIGINS"] = origins
+        return values
 
     # Google OAuth / Frontend
     GOOGLE_CLIENT_ID: Optional[str] = None
@@ -47,10 +49,9 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_MB: int = 10
     ALLOWED_FILE_EXTENSIONS: List[str] = ["jpg", "jpeg", "png", "pdf"]
 
-    model_config = SettingsConfigDict(
-        case_sensitive=True, 
-        env_file=".env",
-        extra="ignore"
-    )
+    class Config:
+        case_sensitive = True
+        env_file = ".env"
+        extra = "ignore"
 
 settings = Settings()
