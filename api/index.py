@@ -1,47 +1,40 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-
 import traceback
+import sys
+import os
 
-# Simple health check app that doesn't require database
-app = FastAPI(title="EduNexia Health Check")
-import_error = None
+# Initialize as None
+app = None
 
-@app.get("/")
-@app.get("/api")
-@app.get("/api/v1")
-def health_check():
-    if import_error:
+try:
+    # Attempt to load the main app
+    from app.main import app as main_app
+    app = main_app
+except Exception as e:
+    # Fallback to diagnostic app if main app fails
+    diagnostic_app = FastAPI(title="EduNexia Diagnostic")
+    error_msg = str(e)
+    tb_msg = traceback.format_exc()
+
+    @diagnostic_app.get("/api/v1/health")
+    def health_check():
         return JSONResponse({
             "status": "error",
             "message": "Main app failed to load",
-            "error": import_error,
-            "traceback": traceback.format_exc()
-        }, status_code=500)
-    return JSONResponse({
-        "status": "ok",
-        "message": "Serverless function is running",
-        "service": "EduNexia API"
-    })
+            "error": error_msg,
+            "traceback": tb_msg,
+            "python_version": sys.version,
+            "cwd": os.getcwd(),
+            "path": sys.path
+        })
+    
+    @diagnostic_app.get("/api/v1")
+    def root_check():
+        return health_check()
 
-@app.get("/api/v1/health")
-def detailed_health():
-    import os
-    return JSONResponse({
-        "status": "ok",
-        "environment": os.environ.get("VERCEL_ENV", "unknown"),
-        "has_database_url": bool(os.environ.get("DATABASE_URL")),
-        "python_version": os.sys.version,
-        "import_error": import_error
-    })
+    @diagnostic_app.get("/{full_path:path}")
+    def catch_all(full_path: str):
+        return health_check()
 
-# Try to import the main app, but fall back to health check if it fails
-try:
-    from app.main import app as main_app
-    app = main_app
-    print("✅ Successfully loaded main app")
-except Exception as e:
-    import_error = str(e)
-    print(f"⚠️ Failed to load main app: {e}")
-    print("Using health check app instead")
-
+    app = diagnostic_app
