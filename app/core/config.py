@@ -1,4 +1,4 @@
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Any
 from pydantic import AnyHttpUrl, validator, root_validator, BaseSettings
 
 class Settings(BaseSettings):
@@ -22,14 +22,14 @@ class Settings(BaseSettings):
         return v
 
     # CORS
-    BACKEND_CORS_ORIGINS: List[str] = []
+    BACKEND_CORS_ORIGINS: Any = []
     ALLOWED_ORIGINS: Optional[str] = None
 
     @validator("BACKEND_CORS_ORIGINS", pre=True)
     @classmethod
-    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+    def assemble_cors_origins(cls, v: Any) -> List[str]:
         # Handle None or empty string
-        if v is None or v == "" or v == "[]":
+        if v is None or v == "" or v == "[]" or v == '""':
             return []
         if isinstance(v, str) and not v.startswith("["):
             # Tách chuỗi bằng dấu phẩy và loại bỏ khoảng trắng + dấu / ở cuối
