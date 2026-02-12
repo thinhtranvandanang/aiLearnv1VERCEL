@@ -1,0 +1,7 @@
+{
+  "name": "EduNexia Learning Platform",
+  "description": "Nền tảng học tập thông minh EduNexia - Giao diện dành cho học sinh.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

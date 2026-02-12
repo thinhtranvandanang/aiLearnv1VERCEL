@@ -1,0 +1,1222 @@
+============================================================
+PROJECT: EduNexia Backend
+TECH: Python Backend (FastAPI)
+DATE: 2024-05-24
+============================================================
+
+============================================================
+FOLDER STRUCTURE
+============================================================
+project_root/
+├── .env.example
+├── alembic.ini
+├── README.md
+├── render.yaml
+├── requirements.txt
+└── app/
+    ├── __init__.py
+    ├── main.py
+    ├── api/
+    │   ├── __init__.py
+    │   ├── deps.py
+    │   └── v1/
+    │       ├── __init__.py
+    │       ├── api.py
+    │       └── endpoints/
+    │           ├── __init__.py
+    │           ├── auth.py
+    │           ├── history.py
+    │           ├── results.py
+    │           ├── submit.py
+    │           └── tests.py
+    ├── core/
+    │   ├── __init__.py
+    │   ├── config.py
+    │   ├── database.py
+    │   ├── exceptions.py
+    │   ├── response.py
+    │   └── security.py
+    ├── db/
+    │   ├── __init__.py
+    │   ├── base.py
+    │   └── session.py
+    ├── models/
+    │   ├── __init__.py
+    │   ├── account.py
+    │   ├── base.py
+    │   ├── history.py
+    │   ├── practice_test.py
+    │   ├── question.py
+    │   ├── result.py
+    │   ├── session.py
+    │   ├── submission.py
+    │   └── suggestion.py
+    ├── schemas/
+    │   ├── __init__.py
+    │   ├── auth.py
+    │   ├── result.py
+    │   ├── submission.py
+    │   └── test.py
+    └── services/
+        ├── __init__.py
+        ├── auth_service.py
+        ├── grading_service.py
+        ├── history_service.py
+        ├── submission_service.py
+        ├── suggestion_service.py
+        └── test_service.py
+
+============================================================
+FILE: .env.example
+============================================================
+# Database
+DATABASE_URL=postgresql://user:password@localhost:5432/edunexia
+
+# Security
+SECRET_KEY=generate_a_random_string_for_production
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=10080
+
+# Application
+ENVIRONMENT=development
+DEBUG=True
+
+# CORS
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+
+============================================================
+FILE: requirements.txt
+============================================================
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+sqlalchemy==2.0.25
+alembic==1.13.1
+psycopg2-binary==2.9.9
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+============================================================
+FILE: alembic.ini
+============================================================
+[alembic]
+script_location = alembic
+sqlalchemy.url = postgresql://user:password@localhost/edunexia
+
+[loggers]
+keys = root,sqlalchemy,alembic
+
+[handlers]
+keys = console
+
+[formatters]
+keys = generic
+
+[logger_root]
+level = WARN
+handlers = console
+qualname =
+
+[logger_sqlalchemy]
+level = WARN
+handlers =
+qualname = sqlalchemy.engine
+
+[logger_alembic]
+level = INFO
+handlers =
+qualname = alembic
+
+[handler_console]
+class = StreamHandler
+args = (sys.stderr,)
+level = NOTSET
+formatter = generic
+
+[formatter_generic]
+format = %(levelname)-5.5s [%(name)s] %(message)s
+datefmt = %H:%M:%S
+
+============================================================
+FILE: render.yaml
+============================================================
+services:
+  - type: web
+    name: edunexia-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: edunexia-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ENVIRONMENT
+        value: production
+
+databases:
+  - name: edunexia-db
+    databaseName: edunexia
+    user: edunexia_user
+
+============================================================
+FILE: README.md
+============================================================
+# EduNexia Backend API
+
+Hệ thống quản lý học tập thông minh dựa trên FastAPI và Clean Architecture.
+
+## Tech Stack
+- **Framework:** FastAPI
+- **Database:** PostgreSQL
+- **ORM:** SQLAlchemy
+- **Migration:** Alembic
+- **Auth:** JWT + OAuth2
+
+## Cấu trúc thư mục
+Tuân thủ Clean Architecture: API -> Service -> Model.
+
+## Hướng dẫn cài đặt Local
+1. Clone dự án.
+2. Cài đặt dependencies: `pip install -r requirements.txt`.
+3. Cấu hình `.env` từ `.env.example`.
+4. Chạy Migration: `alembic upgrade head`.
+5. Khởi chạy app: `python -m app.main`.
+
+## Danh sách API
+| Chức năng | Endpoint | Method |
+|-----------|----------|--------|
+| Đăng nhập | /api/v1/auth/student/login | POST |
+| Tạo đề | /api/v1/practice-tests/generate | POST |
+| Nội dung đề | /api/v1/practice-tests/{id}/content | GET |
+| Nộp online | /api/v1/practice-tests/{id}/submit-online | POST |
+| Tải đề | /api/v1/practice-tests/{id}/download | GET |
+| Nộp offline | /api/v1/practice-tests/{id}/submit-offline | POST |
+| Kết quả | /api/v1/submissions/{id}/result | GET |
+| Gợi ý | /api/v1/submissions/{id}/learning-suggestions | GET |
+| Lịch sử | /api/v1/students/me/learning-history | GET |
+
+============================================================
+FILE: app/core/config.py
+============================================================
+from typing import List, Union
+from pydantic import AnyHttpUrl, validator
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    PROJECT_NAME: str = "EduNexia API"
+    API_V1_STR: str = "/api/v1"
+    SECRET_KEY: str = "development_secret_key_change_me_in_production"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    
+    ENVIRONMENT: str = "development"
+    DEBUG: bool = True
+
+    # Database
+    DATABASE_URL: str = "postgresql://user:password@localhost:5432/edunexia"
+
+    # CORS
+    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
+
+    @validator("BACKEND_CORS_ORIGINS", pre=True)
+    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
+        if isinstance(v, str) and not v.startswith("["):
+            return [i.strip() for i in v.split(",")]
+        elif isinstance(v, (list, str)):
+            return v
+        raise ValueError(v)
+
+    # File Storage
+    UPLOAD_DIR: str = "uploads"
+    MAX_FILE_SIZE_MB: int = 10
+    ALLOWED_FILE_EXTENSIONS: List[str] = ["jpg", "jpeg", "png", "pdf"]
+
+    class Config:
+        case_sensitive = True
+        env_file = ".env"
+
+settings = Settings()
+
+============================================================
+FILE: app/core/security.py
+============================================================
+from datetime import datetime, timedelta
+from typing import Any, Union
+from jose import jwt
+from passlib.context import CryptContext
+from app.core.config import settings
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def create_access_token(subject: Union[str, Any], expires_delta: timedelta = None) -> str:
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode = {"exp": expire, "sub": str(subject)}
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+============================================================
+FILE: app/core/database.py
+============================================================
+from sqlalchemy import create_all, create_engine
+from sqlalchemy.orm import sessionmaker
+from app.core.config import settings
+
+# Engine setup
+engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
+
+# Session factory
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+============================================================
+FILE: app/db/session.py
+============================================================
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from app.core.config import settings
+
+engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+============================================================
+FILE: app/db/base.py
+============================================================
+# Import all models for Alembic
+from app.models.base import Base
+from app.models.account import User
+from app.models.session import Session
+from app.models.question import Question
+from app.models.practice_test import PracticeTest
+from app.models.submission import Submission
+from app.models.result import GradingResult
+from app.models.suggestion import LearningSuggestion
+from app.models.history import LearningHistory
+
+============================================================
+FILE: app/core/response.py
+============================================================
+from typing import Any, Generic, Optional, TypeVar
+from pydantic import BaseModel
+
+T = TypeVar("T")
+
+class APIResponse(BaseModel, Generic[T]):
+    status: str = "success"
+    message: Optional[str] = None
+    data: Optional[T] = None
+
+    @classmethod
+    def success(cls, data: Any = None, message: str = "Operation successful"):
+        return cls(status="success", message=message, data=data)
+
+    @classmethod
+    def error(cls, message: str = "An error occurred", status: str = "error"):
+        return cls(status=status, message=message, data=None)
+
+============================================================
+FILE: app/core/exceptions.py
+============================================================
+from fastapi import HTTPException, status
+
+class EduNexiaException(HTTPException):
+    def __init__(self, detail: str, status_code: int = status.HTTP_400_BAD_REQUEST):
+        super().__init__(status_code=status_code, detail=detail)
+
+class AuthException(EduNexiaException):
+    def __init__(self, detail: str = "Invalid credentials"):
+        super().__init__(detail=detail, status_code=status.HTTP_401_UNAUTHORIZED)
+
+class NotFoundException(EduNexiaException):
+    def __init__(self, item: str = "Item"):
+        super().__init__(detail=f"{item} not found", status_code=status.HTTP_404_NOT_FOUND)
+
+class PermissionException(EduNexiaException):
+    def __init__(self, detail: str = "Permission denied"):
+        super().__init__(detail=detail, status_code=status.HTTP_403_FORBIDDEN)
+
+class BusinessLogicException(EduNexiaException):
+    def __init__(self, detail: str):
+        super().__init__(detail=detail, status_code=status.HTTP_400_BAD_REQUEST)
+
+============================================================
+FILE: app/api/deps.py
+============================================================
+from typing import Generator
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import jwt, JWTError
+from sqlalchemy.orm import Session
+from app.core.config import settings
+from app.core.database import SessionLocal
+from app.models.account import User
+from app.core.exceptions import AuthException
+
+reusable_oauth2 = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/student/login")
+
+def get_db() -> Generator:
+    try:
+        db = SessionLocal()
+        yield db
+    finally:
+        db.close()
+
+def get_current_user(
+    db: Session = Depends(get_db),
+    token: str = Depends(reusable_oauth2)
+) -> User:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise AuthException()
+    except JWTError:
+        raise AuthException()
+    
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if not user:
+        raise AuthException("User not found")
+    if not user.is_active:
+        raise AuthException("User account is inactive")
+    return user
+
+def get_current_student(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="The user doesn't have enough privileges")
+    return current_user
+
+============================================================
+FILE: app/models/base.py
+============================================================
+from datetime import datetime
+from sqlalchemy.ext.declarative import as_declarative, declared_attr
+from sqlalchemy import Column, Integer, DateTime
+
+@as_declarative()
+class Base:
+    id: int = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @declared_attr
+    def __tablename__(cls) -> str:
+        return cls.__name__.lower()
+
+============================================================
+FILE: app/models/account.py
+============================================================
+from sqlalchemy import Column, String, Boolean, Enum
+from sqlalchemy.orm import relationship
+from app.models.base import Base
+
+class User(Base):
+    __tablename__ = "users"
+    
+    username = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    full_name = Column(String)
+    role = Column(String, default="student") # student, admin, teacher
+    is_active = Column(Boolean, default=True)
+    is_locked = Column(Boolean, default=False)
+
+    sessions = relationship("Session", back_populates="user")
+    practice_tests = relationship("PracticeTest", back_populates="student")
+    submissions = relationship("Submission", back_populates="student")
+
+============================================================
+FILE: app/models/session.py
+============================================================
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime
+from sqlalchemy.orm import relationship
+from app.models.base import Base
+
+class Session(Base):
+    __tablename__ = "sessions"
+    
+    token = Column(String, unique=True, index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    expires_at = Column(DateTime, nullable=False)
+
+    user = relationship("User", back_populates="sessions")
+
+============================================================
+FILE: app/models/question.py
+============================================================
+from sqlalchemy import Column, String, Text, Enum, Integer, Table, ForeignKey
+from sqlalchemy.orm import relationship
+from app.models.base import Base
+
+# Association table for PracticeTest and Question
+test_question_association = Table(
+    "test_question_association",
+    Base.metadata,
+    Column("test_id", Integer, ForeignKey("practice_tests.id")),
+    Column("question_id", Integer, ForeignKey("questions.id"))
+)
+
+class Question(Base):
+    __tablename__ = "questions"
+    
+    subject = Column(String, index=True, nullable=False)
+    topic = Column(String, index=True, nullable=False)
+    level = Column(String, index=True, nullable=False) # easy, medium, hard
+    content = Column(Text, nullable=False)
+    options = Column(Text) # JSON string of choices
+    correct_answer = Column(String, nullable=False)
+    explanation = Column(Text)
+
+    practice_tests = relationship("PracticeTest", secondary=test_question_association, back_populates="questions")
+
+============================================================
+FILE: app/models/practice_test.py
+============================================================
+from sqlalchemy import Column, String, Integer, ForeignKey
+from sqlalchemy.orm import relationship
+from app.models.base import Base
+from app.models.question import test_question_association
+
+class PracticeTest(Base):
+    __tablename__ = "practice_tests"
+    
+    title = Column(String, nullable=False)
+    subject = Column(String, nullable=False)
+    student_id = Column(Integer, ForeignKey("users.id"))
+    duration_minutes = Column(Integer, default=45)
+    status = Column(String, default="ready") # ready, completed
+
+    student = relationship("User", back_populates="practice_tests")
+    questions = relationship("Question", secondary=test_question_association, back_populates="practice_tests")
+    submissions = relationship("Submission", back_populates="practice_test")
+
+============================================================
+FILE: app/models/submission.py
+============================================================
+from sqlalchemy import Column, String, Integer, ForeignKey, Text, DateTime
+from sqlalchemy.orm import relationship
+from app.models.base import Base
+
+class Submission(Base):
+    __tablename__ = "submissions"
+    
+    student_id = Column(Integer, ForeignKey("users.id"))
+    test_id = Column(Integer, ForeignKey("practice_tests.id"))
+    type = Column(String, nullable=False) # online, offline
+    file_path = Column(String) # For offline images
+    answers = Column(Text) # JSON mapping question_id to student_answer
+    status = Column(String, default="pending") # pending, graded
+    submitted_at = Column(DateTime)
+
+    student = relationship("User", back_populates="submissions")
+    practice_test = relationship("PracticeTest", back_populates="submissions")
+    result = relationship("GradingResult", back_populates="submission", uselist=False)
+
+============================================================
+FILE: app/models/result.py
+============================================================
+from sqlalchemy import Column, Float, Integer, ForeignKey, Text
+from sqlalchemy.orm import relationship
+from app.models.base import Base
+
+class GradingResult(Base):
+    __tablename__ = "grading_results"
+    
+    submission_id = Column(Integer, ForeignKey("submissions.id"))
+    score = Column(Float, nullable=False)
+    total_questions = Column(Integer, nullable=False)
+    correct_answers = Column(Integer, nullable=False)
+    wrong_answers = Column(Integer, nullable=False)
+    feedback_details = Column(Text) # JSON mapping question_id to {is_correct, explanation}
+
+    submission = relationship("Submission", back_populates="result")
+    suggestions = relationship("LearningSuggestion", back_populates="result")
+
+============================================================
+FILE: app/models/suggestion.py
+============================================================
+from sqlalchemy import Column, Integer, ForeignKey, Text, String
+from sqlalchemy.orm import relationship
+from app.models.base import Base
+
+class LearningSuggestion(Base):
+    __tablename__ = "learning_suggestions"
+    
+    result_id = Column(Integer, ForeignKey("grading_results.id"))
+    topic = Column(String, nullable=False)
+    priority = Column(Integer, default=1) # 1: high, 2: medium, 3: low
+    content = Column(Text, nullable=False)
+
+    result = relationship("GradingResult", back_populates="suggestions")
+
+============================================================
+FILE: app/models/history.py
+============================================================
+from sqlalchemy import Column, Integer, ForeignKey, Float, String
+from app.models.base import Base
+
+class LearningHistory(Base):
+    __tablename__ = "learning_history"
+    
+    student_id = Column(Integer, ForeignKey("users.id"))
+    total_tests_taken = Column(Integer, default=0)
+    average_score = Column(Float, default=0.0)
+    progress_trend = Column(String) # simple descriptive string
+
+============================================================
+FILE: app/schemas/auth.py
+============================================================
+from typing import Optional
+from pydantic import BaseModel, EmailStr
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenPayload(BaseModel):
+    sub: Optional[int] = None
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class UserBase(BaseModel):
+    username: str
+    email: EmailStr
+    full_name: str
+    role: str
+
+class UserOut(UserBase):
+    id: int
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+============================================================
+FILE: app/schemas/test.py
+============================================================
+from typing import List, Optional
+from pydantic import BaseModel
+
+class TestGenerateRequest(BaseModel):
+    subject: str
+    topic: str
+    level: str
+    question_count: Optional[int] = 10
+
+class TestSummary(BaseModel):
+    id: int
+    title: str
+    subject: str
+    question_count: int
+    duration_minutes: int
+    status: str
+
+    class Config:
+        from_attributes = True
+
+class QuestionOut(BaseModel):
+    id: int
+    content: str
+    options: Optional[str] = None # JSON string or actual dict if parsed
+
+    class Config:
+        from_attributes = True
+
+class TestContent(TestSummary):
+    questions: List[QuestionOut]
+
+============================================================
+FILE: app/schemas/submission.py
+============================================================
+from typing import Dict, Any, Optional
+from pydantic import BaseModel
+from datetime import datetime
+
+class OnlineSubmissionRequest(BaseModel):
+    answers: Dict[int, str] # question_id -> student_answer
+    start_time: datetime
+    end_time: datetime
+
+class SubmissionResponse(BaseModel):
+    id: int
+    status: str
+    submitted_at: datetime
+    message: str = "Submission received successfully"
+
+    class Config:
+        from_attributes = True
+
+============================================================
+FILE: app/schemas/result.py
+============================================================
+from typing import List, Dict, Any
+from pydantic import BaseModel
+
+class QuestionFeedback(BaseModel):
+    question_id: int
+    student_answer: str
+    correct_answer: str
+    is_correct: bool
+    explanation: str
+
+class ResultOut(BaseModel):
+    submission_id: int
+    score: float
+    total_questions: int
+    correct_answers: int
+    wrong_answers: int
+    feedback: List[QuestionFeedback]
+
+class LearningSuggestionOut(BaseModel):
+    topic: str
+    priority: int
+    content: str
+
+class HistorySummary(BaseModel):
+    total_tests: int
+    average_score: float
+    progress_trend: str
+    recent_tests: List[Dict[str, Any]]
+
+============================================================
+FILE: app/services/auth_service.py
+============================================================
+from sqlalchemy.orm import Session
+from app.models.account import User
+from app.core.security import verify_password, create_access_token
+from app.core.exceptions import AuthException
+
+class AuthService:
+    @staticmethod
+    def authenticate_student(db: Session, username: str, password: str):
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            raise AuthException("Tài khoản không tồn tại")
+        
+        if not verify_password(password, user.hashed_password):
+            raise AuthException("Thông tin đăng nhập không đúng")
+        
+        if not user.is_active:
+            raise AuthException("Tài khoản bị khóa")
+        
+        token = create_access_token(subject=user.id)
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "user": user
+        }
+
+auth_service = AuthService()
+
+============================================================
+FILE: app/services/test_service.py
+============================================================
+import random
+from sqlalchemy.orm import Session
+from app.models.question import Question
+from app.models.practice_test import PracticeTest
+from app.models.account import User
+from app.core.exceptions import BusinessLogicException, NotFoundException
+
+class PracticeTestService:
+    @staticmethod
+    def generate_test(db: Session, student_id: int, subject: str, topic: str, level: str, count: int):
+        # 1. Tìm câu hỏi phù hợp
+        questions = db.query(Question).filter(
+            Question.subject == subject,
+            Question.topic == topic,
+            Question.level == level
+        ).all()
+        
+        if len(questions) < count:
+            raise BusinessLogicException(f"Không đủ câu hỏi theo tiêu chí yêu cầu. Hiện có: {len(questions)}")
+        
+        selected_questions = random.sample(questions, count)
+        
+        # 2. Tạo đề
+        test = PracticeTest(
+            title=f"Đề luyện tập {subject} - {topic}",
+            subject=subject,
+            student_id=student_id,
+            duration_minutes=count * 2, # Giả định 2p/câu
+            status="ready"
+        )
+        test.questions = selected_questions
+        
+        db.add(test)
+        db.commit()
+        db.refresh(test)
+        return test
+
+    @staticmethod
+    def get_test_content(db: Session, test_id: int, student_id: int):
+        test = db.query(PracticeTest).filter(PracticeTest.id == test_id).first()
+        if not test:
+            raise NotFoundException("Đề luyện tập")
+        if test.student_id != student_id:
+            raise BusinessLogicException("Bạn không có quyền truy cập đề này")
+        return test
+
+    @staticmethod
+    def export_test(db: Session, test_id: int, student_id: int, format: str):
+        # Giả lập logic sinh file PDF/DOCX
+        return {"filename": f"test_{test_id}.{format}", "url": f"/downloads/test_{test_id}"}
+
+test_service = PracticeTestService()
+
+============================================================
+FILE: app/services/submission_service.py
+============================================================
+import json
+from datetime import datetime
+from sqlalchemy.orm import Session
+from app.models.submission import Submission
+from app.models.practice_test import PracticeTest
+from app.core.exceptions import BusinessLogicException, NotFoundException
+
+class SubmissionService:
+    @staticmethod
+    def submit_online(db: Session, student_id: int, test_id: int, answers: dict, start_time: datetime, end_time: datetime):
+        test = db.query(PracticeTest).filter(PracticeTest.id == test_id).first()
+        if not test:
+            raise NotFoundException("Đề luyện tập")
+        if test.student_id != student_id:
+            raise BusinessLogicException("Bạn không có quyền nộp bài cho đề này")
+        
+        # Kiểm tra xem đã nộp chưa
+        existing = db.query(Submission).filter(Submission.test_id == test_id).first()
+        if existing:
+            raise BusinessLogicException("Bài đã được nộp trước đó")
+
+        submission = Submission(
+            student_id=student_id,
+            test_id=test_id,
+            type="online",
+            answers=json.dumps({str(k): v for k, v in answers.items()}),
+            status="graded", # Chấm online luôn
+            submitted_at=end_time
+        )
+        db.add(submission)
+        db.commit()
+        db.refresh(submission)
+        
+        # Gọi grading_service (giả định được import hoặc inject)
+        from app.services.grading_service import grading_service
+        grading_service.grade_submission(db, submission.id)
+        
+        return submission
+
+    @staticmethod
+    def submit_offline(db: Session, student_id: int, test_id: int, file_path: str):
+        test = db.query(PracticeTest).filter(PracticeTest.id == test_id).first()
+        if not test:
+            raise NotFoundException("Đề luyện tập")
+        
+        submission = Submission(
+            student_id=student_id,
+            test_id=test_id,
+            type="offline",
+            file_path=file_path,
+            status="pending",
+            submitted_at=datetime.utcnow()
+        )
+        db.add(submission)
+        db.commit()
+        db.refresh(submission)
+        return submission
+
+submission_service = SubmissionService()
+
+============================================================
+FILE: app/services/grading_service.py
+============================================================
+import json
+from sqlalchemy.orm import Session
+from app.models.submission import Submission
+from app.models.result import GradingResult
+from app.models.practice_test import PracticeTest
+from app.core.exceptions import NotFoundException, BusinessLogicException
+
+class GradingService:
+    @staticmethod
+    def grade_submission(db: Session, submission_id: int):
+        submission = db.query(Submission).filter(Submission.id == submission_id).first()
+        if not submission:
+            raise NotFoundException("Bài làm")
+        
+        if submission.status == "pending" and submission.type == "offline":
+            # Trong thực tế sẽ gọi AI OCR ở đây
+            pass
+
+        # Lấy đáp án chuẩn từ đề
+        test = submission.practice_test
+        student_answers = json.loads(submission.answers) if submission.answers else {}
+        
+        correct_count = 0
+        feedback = []
+        
+        for q in test.questions:
+            ans = student_answers.get(str(q.id))
+            is_correct = ans == q.correct_answer
+            if is_correct:
+                correct_count += 1
+            feedback.append({
+                "question_id": q.id,
+                "student_answer": ans,
+                "correct_answer": q.correct_answer,
+                "is_correct": is_correct,
+                "explanation": q.explanation
+            })
+            
+        total = len(test.questions)
+        score = (correct_count / total) * 10 if total > 0 else 0
+        
+        result = GradingResult(
+            submission_id=submission_id,
+            score=round(score, 2),
+            total_questions=total,
+            correct_answers=correct_count,
+            wrong_answers=total - correct_count,
+            feedback_details=json.dumps(feedback)
+        )
+        
+        submission.status = "graded"
+        db.add(result)
+        db.commit()
+        return result
+
+    @staticmethod
+    def get_result(db: Session, submission_id: int, student_id: int):
+        submission = db.query(Submission).filter(Submission.id == submission_id).first()
+        if not submission:
+            raise NotFoundException("Bài làm")
+        if submission.student_id != student_id:
+            raise BusinessLogicException("Bạn không có quyền xem bài này")
+        if submission.status != "graded":
+            raise BusinessLogicException("Bài chưa được chấm")
+        return submission.result
+
+grading_service = GradingService()
+
+============================================================
+FILE: app/services/suggestion_service.py
+============================================================
+import json
+from sqlalchemy.orm import Session
+from app.models.result import GradingResult
+from app.models.suggestion import LearningSuggestion
+from app.core.exceptions import BusinessLogicException
+
+class SuggestionService:
+    @staticmethod
+    def get_suggestions(db: Session, submission_id: int, student_id: int):
+        result = db.query(GradingResult).filter(GradingResult.submission_id == submission_id).first()
+        if not result:
+            raise BusinessLogicException("Bài chưa được chấm nên chưa có gợi ý")
+        
+        if result.submission.student_id != student_id:
+            raise BusinessLogicException("Permission denied")
+
+        # Phân tích logic
+        feedback = json.loads(result.feedback_details)
+        wrong_questions = [f for f in feedback if not f['is_correct']]
+        
+        if not wrong_questions:
+            return [LearningSuggestion(topic="General", priority=3, content="Tuyệt vời! Bạn đã làm đúng hết. Hãy thử thách với độ khó cao hơn.")]
+
+        # Mô phỏng gợi ý
+        suggestions = [
+            LearningSuggestion(
+                topic="Kiến thức hổng", 
+                priority=1, 
+                content=f"Bạn sai {len(wrong_questions)} câu. Cần ôn lại các khái niệm cơ bản về chương này."
+            )
+        ]
+        return suggestions
+
+suggestion_service = SuggestionService()
+
+============================================================
+FILE: app/services/history_service.py
+============================================================
+from sqlalchemy.orm import Session
+from app.models.submission import Submission
+from app.models.result import GradingResult
+
+class HistoryService:
+    @staticmethod
+    def get_history(db: Session, student_id: int):
+        submissions = db.query(Submission).filter(Submission.student_id == student_id).all()
+        
+        results = []
+        total_score = 0
+        count = 0
+        
+        for sub in submissions:
+            if sub.result:
+                results.append({
+                    "id": sub.id,
+                    "test_title": sub.practice_test.title,
+                    "score": sub.result.score,
+                    "submitted_at": sub.submitted_at
+                })
+                total_score += sub.result.score
+                count += 1
+        
+        avg = total_score / count if count > 0 else 0
+        
+        return {
+            "total_tests": len(submissions),
+            "average_score": round(avg, 2),
+            "progress_trend": "Ổn định" if avg >= 5 else "Cần cố gắng",
+            "recent_tests": results[-5:] # Lấy 5 bài gần nhất
+        }
+
+history_service = HistoryService()
+
+============================================================
+FILE: app/api/v1/endpoints/auth.py
+============================================================
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from app.api import deps
+from app.schemas.auth import LoginRequest, Token
+from app.services.auth_service import auth_service
+from app.core.response import APIResponse
+
+router = APIRouter()
+
+@router.post("/login")
+def login(request_data: LoginRequest, db: Session = Depends(deps.get_db)):
+    """Xác thực và tạo phiên đăng nhập cho học sinh."""
+    result = auth_service.authenticate_student(
+        db, 
+        username=request_data.username, 
+        password=request_data.password
+    )
+    return APIResponse.success(data=result)
+
+============================================================
+FILE: app/api/v1/endpoints/tests.py
+============================================================
+from fastapi import APIRouter, Depends, Body
+from sqlalchemy.orm import Session
+from app.api import deps
+from app.schemas.test import TestGenerateRequest, TestContent
+from app.services.test_service import test_service
+from app.core.response import APIResponse
+from app.models.account import User
+
+router = APIRouter()
+
+@router.post("/generate")
+def generate(
+    request: TestGenerateRequest, 
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_student)
+):
+    """Tạo đề luyện tập mới dựa trên tiêu chí."""
+    test = test_service.generate_test(
+        db, current_user.id, request.subject, request.topic, request.level, request.question_count
+    )
+    return APIResponse.success(data={"test_id": test.id, "title": test.title})
+
+@router.get("/{testId}/content")
+def get_content(
+    testId: int, 
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_student)
+):
+    """Tải nội dung đề cho học sinh."""
+    test = test_service.get_test_content(db, testId, current_user.id)
+    return APIResponse.success(data=test)
+
+@router.get("/{testId}/download")
+def download(
+    testId: int,
+    format: str = "pdf",
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_student)
+):
+    """Xuất đề ra file."""
+    result = test_service.export_test(db, testId, current_user.id, format)
+    return APIResponse.success(data=result)
+
+============================================================
+FILE: app/api/v1/endpoints/submit.py
+============================================================
+from fastapi import APIRouter, Depends, UploadFile, File
+from sqlalchemy.orm import Session
+from app.api import deps
+from app.schemas.submission import OnlineSubmissionRequest
+from app.services.submission_service import submission_service
+from app.core.response import APIResponse
+from app.models.account import User
+
+router = APIRouter()
+
+@router.post("/{testId}/submit-online")
+def submit_online(
+    testId: int,
+    request: OnlineSubmissionRequest,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_student)
+):
+    """Nộp bài làm trực tuyến."""
+    submission = submission_service.submit_online(
+        db, current_user.id, testId, request.answers, request.start_time, request.end_time
+    )
+    return APIResponse.success(data={"submission_id": submission.id})
+
+@router.post("/{testId}/submit-offline")
+async def submit_offline(
+    testId: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_student)
+):
+    """Nộp bài làm ngoại tuyến qua file/ảnh."""
+    # Logic lưu file thực tế ở đây
+    file_path = f"uploads/{file.filename}"
+    submission = submission_service.submit_offline(db, current_user.id, testId, file_path)
+    return APIResponse.success(data={"submission_id": submission.id})
+
+============================================================
+FILE: app/api/v1/endpoints/results.py
+============================================================
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from app.api import deps
+from app.services.grading_service import grading_service
+from app.services.suggestion_service import suggestion_service
+from app.core.response import APIResponse
+from app.models.account import User
+
+router = APIRouter()
+
+@router.get("/{submissionId}/result")
+def get_result(
+    submissionId: int,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_student)
+):
+    """Xem kết quả chấm bài chi tiết."""
+    result = grading_service.get_result(db, submissionId, current_user.id)
+    return APIResponse.success(data=result)
+
+@router.get("/{submissionId}/learning-suggestions")
+def get_suggestions(
+    submissionId: int,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_student)
+):
+    """Nhận gợi ý học tập sau khi làm bài."""
+    suggestions = suggestion_service.get_suggestions(db, submissionId, current_user.id)
+    return APIResponse.success(data=suggestions)
+
+============================================================
+FILE: app/api/v1/endpoints/history.py
+============================================================
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from app.api import deps
+from app.services.history_service import history_service
+from app.core.response import APIResponse
+from app.models.account import User
+
+router = APIRouter()
+
+@router.get("/me/learning-history")
+def get_history(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_student)
+):
+    """Xem tổng hợp lịch sử học tập."""
+    history = history_service.get_history(db, current_user.id)
+    return APIResponse.success(data=history)
+
+@router.get("/me/learning-history/{submissionId}")
+def get_detail(
+    submissionId: int,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_student)
+):
+    """Xem chi tiết một bài đã làm trong quá khứ."""
+    from app.services.grading_service import grading_service
+    result = grading_service.get_result(db, submissionId, current_user.id)
+    return APIResponse.success(data=result)
+
+============================================================
+FILE: app/api/v1/api.py
+============================================================
+from fastapi import APIRouter
+from app.api.v1.endpoints import auth, tests, submit, results, history
+
+api_router = APIRouter()
+
+api_router.include_router(auth.router, prefix="/auth/student", tags=["Authentication"])
+api_router.include_router(tests.router, prefix="/practice-tests", tags=["Practice Tests"])
+api_router.include_router(submit.router, prefix="/practice-tests", tags=["Submission"])
+api_router.include_router(results.router, prefix="/submissions", tags=["Results & Suggestions"])
+api_router.include_router(history.router, prefix="/students", tags=["Learning History"])
+
+============================================================
+FILE: app/main.py
+============================================================
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from app.api.v1.api import api_router
+from app.core.config import settings
+from app.core.exceptions import EduNexiaException
+
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+)
+
+# CORS
+if settings.BACKEND_CORS_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+# Global Exception Handler
+@app.exception_handler(EduNexiaException)
+async def edunexia_exception_handler(request: Request, exc: EduNexiaException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"status": "error", "message": exc.detail},
+    )
+
+# Routers
+app.include_router(api_router, prefix=settings.API_V1_STR)
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "service": "EduNexia API", "version": "1.0.0"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+
+============================================================
+END OF CODE BACKEND
+============================================================

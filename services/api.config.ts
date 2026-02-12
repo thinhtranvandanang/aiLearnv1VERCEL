@@ -1,0 +1,43 @@
+
+import axios from 'axios';
+
+// Use environment variable for API URL, fallback to localhost for development
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+
+export const apiClient = axios.create({
+  baseURL: BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('edunexia_token');
+  if (token && config.headers) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Tránh redirect loop: Chỉ chuyển hướng nếu lỗi 401 và không phải đang ở trang login
+    if (error.response?.status === 401 && !window.location.pathname.includes('/login')) {
+      localStorage.removeItem('edunexia_token');
+      localStorage.removeItem('edunexia_user');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error.response?.data || error);
+  }
+);
+
+export const setAuthToken = (token: string) => {
+  localStorage.setItem('edunexia_token', token);
+};
+
+export const clearAuthToken = () => {
+  localStorage.removeItem('edunexia_token');
+};
