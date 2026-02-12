@@ -4,11 +4,24 @@ Hướng dẫn này sẽ giúp bạn triển khai ứng dụng EduNexia (Fronten
 
 ## Tổng Quan Kiến Trúc Triển Khai
 
-Việc triển khai lên Vercel bao gồm 3 phần chính cần được cấu hình:
+Việc triển khai lên Vercel bao gồm 3 phần chính được deploy **cùng lúc trên một domain**:
 
-1.  **Frontend (React)**: Được Vercel build tự động và phục vụ như một Static Site. Vercel sẽ đảm nhận việc routing cho Single Page Application (SPA).
-2.  **Backend (FastAPI)**: Được chuyển đổi thành **Serverless Functions**. Thay vì chạy một server liên tục (như `uvicorn` trên VPS), Vercel sẽ khởi động function khi có request đến API.
-3.  **Cơ Sở Dữ Liệu (PostgreSQL)**: Vercel không lưu trữ database trực tiếp. Bạn cần sử dụng dịch vụ database bên ngoài (Vercel Postgres, Supabase, Neon, v.v.) và kết nối qua biến môi trường.
+1.  **Frontend (React)**: 
+    - Được Vercel build tự động thành Static Site
+    - Vercel đảm nhận việc routing cho Single Page Application (SPA)
+    - Truy cập qua URL gốc: `https://your-app.vercel.app`
+
+2.  **Backend (FastAPI)**: 
+    - **Tự động** được chuyển đổi thành **Serverless Functions**
+    - Vercel phát hiện code Python trong thư mục `api/` và tự động package
+    - Không cần cấu hình server riêng - Vercel xử lý tất cả
+    - API endpoints truy cập qua: `https://your-app.vercel.app/api/*`
+    - **Lưu ý**: Backend không chạy liên tục như VPS, mà chỉ khởi động khi có request (serverless)
+
+3.  **Cơ Sở Dữ Liệu (PostgreSQL)**: 
+    - Vercel không lưu trữ database trực tiếp
+    - Bạn cần sử dụng dịch vụ database bên ngoài (Vercel Postgres, Supabase, Neon, v.v.)
+    - Kết nối qua biến môi trường `DATABASE_URL`
 
 ## Các File Cấu Hình Quan Trọng
 
@@ -31,22 +44,29 @@ Chúng ta đã tạo các file cần thiết:
 2.  Nhấn **"Add New..."** -> **"Project"**.
 3.  Chọn repository **EduNexia** từ GitHub của bạn và nhấn **Import**.
 
-### Bước 4: Cấu Hình Project
-Trong màn hình "Configure Project":
-1.  **Framework Preset**: Chọn **Vite**.
-2.  **Root Directory**: Để mặc định `./` (nếu code nằm ngay thư mục gốc).
-3.  **Build Command**: `vite build` (Mặc định).
-4.  **Output Directory**: `dist` (Mặc định).
-5.  **Environment Variables**: Khai báo các biến môi trường sau:
+### Bước 4: Tạo Cơ Sở Dữ Liệu (Quan trọng)
+Vì bạn chưa có database, cách nhanh nhất là dùng **Vercel Postgres** ngay trong project:
+1. Trong dashboard project trên Vercel, chọn tab **Storage**.
+2. Chọn **Connect Database** -> **Create New** -> **Postgres**.
+3. Đặt tên (ví dụ: `edunexia-db`) và chọn vùng (Region) gần bạn nhất (ví dụ: Singapore).
+4. Sau khi tạo xong, nhấn **Connect**. Vercel sẽ tự động tạo một biến môi trường tên là **`POSTGRES_URL`** (hoặc `DATABASE_URL`) cho bạn. Bạn không cần phải copy manual nếu dùng cách này!
+
+### Bước 5: Cấu Hình Biến Môi Trường (Environment Variables)
+Trong tab **Settings** -> **Environment Variables**, hãy nhập các biến sau:
 
     | Tên Biến | Giá Trị Ví Dụ / Mô Tả |
     | :--- | :--- |
-    | `DATABASE_URL` | `postgresql://user:pass@host:5432/db` (Lấy từ nhà cung cấp DB) |
-    | `SECRET_KEY` | Chuỗi bí mật ngẫu nhiên (Xem cách tạo bên dưới) |
-    | `ALGORITHM` | `HS256` (Thuật toán mã hóa JWT) |
+    | `DATABASE_URL` | Lấy từ tab Storage (thường là `${POSTGRES_URL}`) |
+    | `SECRET_KEY` | Chuỗi bí mật (đã tạo ở bước trước) |
+    | `ALGORITHM` | `HS256` |
     | `GEMINI_API_KEY` | API Key của Gemini AI |
     | `ENVIRONMENT` | `production` |
-    | `BACKEND_CORS_ORIGINS` | `https://your-project-name.vercel.app` |
+    | `BACKEND_CORS_ORIGINS` | `*` (Lần đầu cứ để dấu sao) |
+
+> [!TIP]
+> **Về `BACKEND_CORS_ORIGINS`**: Vì bạn chưa deploy nên chưa có URL chính thức. 
+> 1. Lần đầu deploy: Bạn có thể để trống hoặc điền `*` để test.
+> 2. Sau khi deploy xong: Vercel sẽ cấp cho bạn một URL (ví dụ: `https://ailearnv1vercel.vercel.app`). Lúc đó bạn quay lại phần **Settings -> Environment Variables** trên Vercel, cập nhật biến này thành URL đó và redeploy để bảo mật hơn.
 
 ### Cách tạo `SECRET_KEY` bảo mật
 Bạn nên sử dụng một chuỗi ngẫu nhiên dài và phức tạp. Có 2 cách đơn giản để tạo:
