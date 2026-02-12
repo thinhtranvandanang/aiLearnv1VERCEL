@@ -8,7 +8,13 @@ from app.core.config import settings
 from app.db import base  # noqa: F401
 
 # Engine setup
-engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
+db_url = settings.DATABASE_URL
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
+elif db_url.startswith("postgresql://") and "+psycopg" not in db_url:
+    db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+
+engine = create_engine(db_url, pool_pre_ping=True)
 
 # Session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
