@@ -17,8 +17,11 @@ class Settings(BaseSettings):
     @validator("DATABASE_URL", pre=True)
     @classmethod
     def assemble_db_url(cls, v: str) -> str:
-        if isinstance(v, str) and v.startswith("postgres://"):
-            return v.replace("postgres://", "postgresql://", 1)
+        if isinstance(v, str):
+            if v.startswith("postgres://"):
+                return v.replace("postgres://", "postgresql+psycopg://", 1)
+            elif v.startswith("postgresql://") and "+psycopg" not in v:
+                return v.replace("postgresql://", "postgresql+psycopg://", 1)
         return v
 
     # CORS
