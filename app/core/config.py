@@ -25,8 +25,8 @@ class Settings(BaseSettings):
         return v
 
     # CORS
-    # Đặt env='NOT_EXISTENT' để Pydantic V1 không tự động load từ env qua bộ parse JSON mặc định
-    BACKEND_CORS_ORIGINS: List[str] = Field([], env="DUMMY_VAR_CORS")
+    # Đổi tên hoàn toàn để Pydantic V1 không bao giờ nhầm lẫn với biến môi trường trùng tên
+    BACKEND_CORS_ORIGINS_FIX: List[str] = []
     ALLOWED_ORIGINS: Optional[str] = None
 
     @root_validator(pre=True)
@@ -39,11 +39,11 @@ class Settings(BaseSettings):
         if raw_cors:
             if raw_cors.startswith("["):
                 try:
-                    values["BACKEND_CORS_ORIGINS"] = json.loads(raw_cors)
+                    values["BACKEND_CORS_ORIGINS_FIX"] = json.loads(raw_cors)
                 except:
-                    values["BACKEND_CORS_ORIGINS"] = [i.strip() for i in raw_cors.split(",") if i.strip()]
+                    values["BACKEND_CORS_ORIGINS_FIX"] = [i.strip() for i in raw_cors.split(",") if i.strip()]
             else:
-                 values["BACKEND_CORS_ORIGINS"] = [i.strip() for i in raw_cors.split(",") if i.strip()]
+                 values["BACKEND_CORS_ORIGINS_FIX"] = [i.strip() for i in raw_cors.split(",") if i.strip()]
         
         # Manual load ALLOWED_FILE_EXTENSIONS
         raw_ext = os.environ.get("ALLOWED_FILE_EXTENSIONS")
@@ -60,13 +60,13 @@ class Settings(BaseSettings):
     
     @root_validator
     def sync_cors_origins_logic(cls, values):
-        """Nếu có ALLOWED_ORIGINS trong .env, nạp vào BACKEND_CORS_ORIGINS."""
+        """Nếu có ALLOWED_ORIGINS trong .env, nạp vào BACKEND_CORS_ORIGINS_FIX."""
         allowed_origins = values.get("ALLOWED_ORIGINS")
-        backend_cors_origins = values.get("BACKEND_CORS_ORIGINS") or []
+        backend_cors_origins = values.get("BACKEND_CORS_ORIGINS_FIX") or []
         
         if allowed_origins and not backend_cors_origins:
             origins = [i.strip().rstrip("/") for i in allowed_origins.split(",") if i.strip()]
-            values["BACKEND_CORS_ORIGINS"] = origins
+            values["BACKEND_CORS_ORIGINS_FIX"] = origins
         return values
 
     # Google OAuth / Frontend
