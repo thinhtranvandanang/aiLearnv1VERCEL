@@ -1,6 +1,5 @@
 from typing import List, Union, Optional
-from pydantic import AnyHttpUrl, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import AnyHttpUrl, field_validator, model_validator, BaseSettings
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "EduNexia API"
