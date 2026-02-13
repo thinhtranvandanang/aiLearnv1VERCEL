@@ -50,10 +50,19 @@ def google_login():
     return RedirectResponse(f"{base_url}?{query_params}")
 
 @google_router.get("/google/callback")
-async def google_callback(code: str, error: str | None = None):
-    frontend_url = settings.FRONTEND_URL.rstrip("/")
+async def google_callback(request: Request, code: str, error: str | None = None):
+    # Detect the correct frontend URL
+    # If settings.FRONTEND_URL is localhost, use the current request host (for Vercel/Production)
+    current_setting = settings.FRONTEND_URL.rstrip("/")
+    if "localhost" in current_setting or not current_setting:
+        # On Vercel, the frontend and backend are usually on the same domain
+        protocol = "https" if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https" else "http"
+        frontend_url = f"{protocol}://{request.url.netloc}"
+    else:
+        frontend_url = current_setting
     
     if error:
+
         logger.error(f"Google OAuth Provider Error: {error}")
         return RedirectResponse(f"{frontend_url}/login?error=access_denied")
 
