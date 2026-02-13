@@ -31,11 +31,13 @@ apiClient.interceptors.response.use(
       window.location.pathname.includes('/auth/callback');
 
     if (error.response?.status === 401 && !isAuthPage) {
+      console.warn(`[API] 401 Unauthorized at ${window.location.pathname}. Redirecting to login...`);
       localStorage.removeItem('edunexia_token');
       localStorage.removeItem('edunexia_user');
 
       const details = error.response?.data?.detail || 'session_expired';
-      window.location.href = `/login?error=unauthorized&details=${encodeURIComponent(details)}`;
+      const from = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/login?error=unauthorized&details=${encodeURIComponent(details)}&from=${from}`;
     }
     return Promise.reject(error.response?.data || error);
   }

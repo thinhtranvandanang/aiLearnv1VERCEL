@@ -6,6 +6,8 @@ import { Card, Button, Input, LoadingOverlay } from '../../components/common/UI.
 import { ROUTES } from '../../constants/routes.ts';
 import { GoogleLoginButton } from '../../components/auth/GoogleLoginButton.tsx';
 
+const VERSION = "v1.5.0-DEBUG-REDIRECT";
+
 export const LoginPage: React.FC = () => {
   const { login, isLoading, setTokenManually } = useAuth();
   const navigate = useNavigate();
@@ -14,9 +16,9 @@ export const LoginPage: React.FC = () => {
   const [isVerifyingGoogle, setIsVerifyingGoogle] = useState(false);
 
   // Lấy và phân tích error từ URL
+  const urlParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const urlError = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    const errCode = params.get('error');
+    const errCode = urlParams.get('error');
     if (!errCode) return null;
 
     switch (errCode) {
@@ -25,9 +27,10 @@ export const LoginPage: React.FC = () => {
       case 'token_failed': return 'Không thể lấy mã xác thực từ Google.';
       case 'user_info_failed': return 'Không thể lấy thông tin cá nhân từ Google.';
       case 'email_missing': return 'Tài khoản Google của bạn thiếu thông tin Email.';
+      case 'unauthorized': return `Phiên đăng nhập không hợp lệ hoặc đã hết hạn. (${urlParams.get('details') || ''})`;
       default: return 'Đã có lỗi xảy ra trong quá trình đăng nhập.';
     }
-  }, [location.search]);
+  }, [urlParams]);
 
   // Hiển thị lỗi từ URL nếu có
   useEffect(() => {
@@ -141,13 +144,24 @@ export const LoginPage: React.FC = () => {
               </div>
 
               {/* Debug Info Section - Helpful for troubleshooting production redirect issues */}
-              {(new URLSearchParams(location.search).has('token') || new URLSearchParams(location.search).has('error')) && (
-                <div className="mt-8 p-4 bg-slate-100 rounded-2xl text-[10px] font-mono text-slate-500 break-all border border-slate-200">
-                  <p className="font-bold mb-1 uppercase tracking-tighter opacity-50">Debug Session Info:</p>
-                  <p>URL: {window.location.href.split('?')[0]}</p>
-                  <p>Params: {location.search || 'None'}</p>
+              {(urlParams.has('token') || urlParams.has('error') || urlParams.has('from')) && (
+                <div className="mt-8 p-6 bg-slate-900 rounded-[2rem] text-[10px] font-mono text-indigo-300 break-all border border-slate-800 shadow-inner">
+                  <div className="flex justify-between items-center mb-2">
+                    <p className="font-black uppercase tracking-widest opacity-50">Diagnostic Console</p>
+                    <span className="bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full font-bold">{VERSION}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <p><span className="text-slate-500">URL:</span> {window.location.protocol}//{window.location.host}{window.location.pathname}</p>
+                    <p><span className="text-slate-500">Params:</span> {location.search || 'None'}</p>
+                    <p><span className="text-slate-500">Redirected From:</span> <span className="text-white font-bold">{urlParams.get('from') || 'Unknown/Direct'}</span></p>
+                    <p><span className="text-slate-500">Status Detail:</span> {urlParams.get('details') || 'None'}</p>
+                  </div>
                 </div>
               )}
+
+              <div className="text-center pt-4 opacity-30 hover:opacity-100 transition-opacity">
+                <span className="text-[9px] font-bold text-slate-400 tracking-widest">{VERSION} BUILD SUCCESS</span>
+              </div>
             </div>
           )}
         </div>
