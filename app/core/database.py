@@ -1,6 +1,9 @@
+import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Import all models so that SQLAlchemy can resolve relationship() 
 # string references like "Session" when mappers are configured.
@@ -15,6 +18,7 @@ elif db_url.startswith("postgresql://"):
     if "+psycopg" not in db_url:
         db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
 
+logger.info(f"Connecting to database with driver: {db_url.split('://')[0]}")
 engine = create_engine(db_url, pool_pre_ping=True)
 
 
